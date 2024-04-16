@@ -1,14 +1,20 @@
 package org.example;
 
+import lombok.Getter;
+import lombok.Setter;
+import org.example.db.DBConnection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-
+import org.example.db.DBConnection;
 import java.io.IOException;
 import java.util.*;
-
+@Getter
+@Setter
 public class Main {
+    public static DBConnection dbConnection;
+    Member_DB member_db;
     public static List<MovieInfo> movieList = new ArrayList<>();
     public static List<Member> members = new ArrayList<>();
     public static Scanner scanner = new Scanner(System.in);
@@ -17,6 +23,14 @@ public class Main {
     public static void main(String[] args) {
         loadMovies();
         makeTestData();
+
+        DBConnection.DB_NAME = "sbs_proj";
+        DBConnection.DB_USER = "sbsst";
+        DBConnection.DB_PASSWORD = "sbs123414";
+        DBConnection.DB_PORT = 3306;
+
+
+
         while (true) {
             System.out.print("명령어) ");
             String cmd = scanner.nextLine();
@@ -50,7 +64,13 @@ public class Main {
             }
         }
     }
+    public static DBConnection getDBConnection() {
+        if ( dbConnection == null ) {
+            dbConnection = new DBConnection();
+        }
 
+        return dbConnection;
+    }
     private static void loadMovies() {
         String url = "https://search.naver.com/search.naver?where=nexearch&sm=tab_etc&qvt=0&query=%ED%98%84%EC%9E%AC%EC%83%81%EC%98%81%EC%98%81%ED%99%94";
         try {
@@ -250,7 +270,6 @@ public class Main {
     }
 
 }
-
 
 
 

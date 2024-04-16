@@ -1,0 +1,37 @@
+DROP DATABASE IF EXISTS sbs_proj;
+CREATE DATABASE sbs_proj;
+USE sbs_proj;
+
+CREATE TABLE `member`(
+id INT(10) UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+regDate DATETIME NOT NULL,
+loginId CHAR(100) NOT NULL UNIQUE,
+loginPw CHAR(100) NOT NULL,
+`name` CHAR(100) NOT NULL);
+
+CREATE TABLE movie_info (
+    id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(255) NOT NULL,
+    rating_1 INT DEFAULT 0,
+    rating_2 INT DEFAULT 0,
+    rating_3 INT DEFAULT 0,
+    rating_4 INT DEFAULT 0,
+    rating_5 INT DEFAULT 0,
+    total_ratings INT DEFAULT 0
+);
+
+CREATE TABLE movie_seats (
+    id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    movie_id INT UNSIGNED NOT NULL,
+    seat_index INT NOT NULL
+);
+
+CREATE TABLE my_review (
+    id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    member_id INT UNSIGNED NOT NULL,
+    movie_title VARCHAR(255) NOT NULL,
+    rating INT NOT NULL,
+    FOREIGN KEY (member_id) REFERENCES MEMBER(id)
+);
+
+
