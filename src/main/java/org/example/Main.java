@@ -9,27 +9,33 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.example.db.DBConnection;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.*;
 @Getter
 @Setter
 public class Main {
     public static DBConnection dbConnection;
-    Member_DB member_db;
     public static List<MovieInfo> movieList = new ArrayList<>();
     public static List<Member> members = new ArrayList<>();
+    public static List<Member> memberDB = new ArrayList();
     public static Scanner scanner = new Scanner(System.in);
     public static int currentMemberIdx = -1;
     public static boolean isLogin = false;
     public static void main(String[] args) {
-        loadMovies();
-        makeTestData();
 
         DBConnection.DB_NAME = "sbs_proj";
         DBConnection.DB_USER = "sbsst";
         DBConnection.DB_PASSWORD = "sbs123414";
         DBConnection.DB_PORT = 3306;
 
-
+        dbConnection = new DBConnection();
+        dbConnection.connect();
+        makeTestData();
+        loadMovies();
+        for(int i = 0 ; i < memberDB.size(); i++)
+            System.out.println(memberDB.get(i));
 
         while (true) {
             System.out.print("명령어) ");
@@ -64,6 +70,26 @@ public class Main {
             }
         }
     }
+
+    public static List<Member> getMemberList() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("SELECT * FROM `member`"));
+
+        List<Member> member_db = new ArrayList();
+        List<Map<String, Object>> rows = dbConnection.selectRows(sb.toString());
+
+        for(Map<String,Object> row : rows) {
+            int id = (int) row.get("id");
+            String loginId = (String) row.get("loginId");
+            String loginPw = (String) row.get("loginPw");
+            String name = (String) row.get("name");
+
+            member_db.add(new Member(id, loginId, loginPw, name));
+        }
+
+        return member_db;
+    }
+
     public static DBConnection getDBConnection() {
         if ( dbConnection == null ) {
             dbConnection = new DBConnection();
@@ -74,6 +100,10 @@ public class Main {
     private static void loadMovies() {
         String url = "https://search.naver.com/search.naver?where=nexearch&sm=tab_etc&qvt=0&query=%ED%98%84%EC%9E%AC%EC%83%81%EC%98%81%EC%98%81%ED%99%94";
         try {
+            // 데이터베이스 연결 열기
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
+
             Document doc = Jsoup.connect(url).userAgent("Mozilla/5.0").get();
             Elements elements = doc.select(".area_text_box");
 
@@ -81,13 +111,45 @@ public class Main {
                 Element link = element.select("a").first();
                 if (link != null) {
                     String title = link.text();
-                    movieList.add(new MovieInfo(title));
+                    MovieInfo movie = new MovieInfo(title);
+                    movieList.add(movie);
+
+                    // 데이터베이스에 영화 정보 삽입
+                    insertMovieInfoToDB(connection, movie);
                 }
             }
-        } catch (IOException e) {
+
+            // 데이터베이스 연결 닫기
+            connection.close();
+        } catch (IOException | SQLException e) {
             e.printStackTrace();
         }
     }
+
+
+    private static void insertMovieInfoToDB(Connection connection, MovieInfo movie) throws SQLException {
+        String sql = "INSERT INTO movie_info (id, title) VALUES (?, ?)";
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            // 파라미터 설정
+            statement.setInt(1, movie.getId()); // 직접 id를 지정해줍니다.
+            statement.setString(2, movie.getTitle());
+
+            // 쿼리 실행
+            int rowsAffected = statement.executeUpdate();
+            if (rowsAffected == 1) {
+                System.out.println("영화 정보가 데이터베이스에 성공적으로 삽입되었습니다.");
+            } else {
+                System.out.println("영화 정보를 데이터베이스에 삽입하는데 실패하였습니다.");
+            }
+        } catch (SQLException e) {
+            System.err.println("SQL 예외 발생: " + e.getMessage());
+            throw e; // 예외를 다시 던져서 호출한 곳에서 처리할 수 있도록 함
+        }
+    }
+
+
+
 
     private static void memberJoin() {
         if(isLogin)
@@ -114,7 +176,7 @@ public class Main {
         System.out.print("이름: ");
         String name = scanner.nextLine();
 
-        Member member = new Member(id, regDate, loginId, loginPw, name);
+        Member member = new Member(id, loginId, loginPw, name);
         members.add(member);
         System.out.printf("%d번 회원이 생성되었습니다. 환영합니다!\n", id);
         currentMemberIdx = id - 1;
@@ -258,16 +320,23 @@ public class Main {
     private static void makeTestData() {
         // 회원 가입 테스트 데이터 생성
         for (int i = 0; i < 3; i++) {
-            int id = members.size() + 1;
-            String regDate = Util.getNowDateStr();
-            String loginId = "user" + id;
-            String loginPw = "password" + id;
-            String name = "User" + id;
-            members.add(new Member(id, regDate, loginId, loginPw, name));
+            String loginId = "user" + (i + 1);
+            String loginPw = "password" + (i + 1);
+            String name = "User" + (i + 1);
+
+            // 중복을 체크하지 않고 새로운 회원 정보 생성
+            Member member = new Member(i+1, loginId, loginPw, name);
+            members.add(member);
+            member.saveToDatabase(dbConnection);
+            memberDB.add(member);
         }
-        currentMemberIdx = members.size()-1;
+        currentMemberIdx = members.size() - 1;
         isLogin = true;
     }
+
+
+
+
 
 }
 

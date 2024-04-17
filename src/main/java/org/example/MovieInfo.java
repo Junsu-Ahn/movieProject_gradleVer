@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 class MovieInfo implements Comparable<MovieInfo> {
+    public int id;
     public String title;
     public Map<Integer, Integer> ratings;
     public String[] remainingSeats;
@@ -28,6 +29,9 @@ class MovieInfo implements Comparable<MovieInfo> {
         ratings.put(rating, ratings.get(rating) - 1);
     }
 
+    public int getId(){
+        return this.id;
+    }
     public double getRating() {
         double total = 0;
         double sum = 0;
