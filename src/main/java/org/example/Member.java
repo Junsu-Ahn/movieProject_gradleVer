@@ -75,4 +75,8 @@ class Member{
     public Map<String, Integer> getMyReview() {
         return myReview;
     }
+
+    public void setName(String newName) {
+        this.name = newName;
+    }
 }

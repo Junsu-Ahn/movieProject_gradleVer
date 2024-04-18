@@ -11,6 +11,7 @@ import org.example.db.DBConnection;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 @Getter
@@ -113,19 +114,16 @@ public class Main {
                     String title = link.text();
                     MovieInfo movie = new MovieInfo(title);
                     movieList.add(movie);
-
                     // 데이터베이스에 영화 정보 삽입
                     insertMovieInfoToDB(connection, movie);
                 }
             }
-
             // 데이터베이스 연결 닫기
             connection.close();
         } catch (IOException | SQLException e) {
             e.printStackTrace();
         }
     }
-
 
     private static void insertMovieInfoToDB(Connection connection, MovieInfo movie) throws SQLException {
         String sql = "INSERT INTO movie_info (id, title) VALUES (?, ?)";
@@ -148,19 +146,14 @@ public class Main {
         }
     }
 
-
-
-
     private static void memberJoin() {
-        if(isLogin)
-        {
+        if (isLogin) {
             System.out.print("로그아웃 하시겠습니까? Y/N ");
             String b = scanner.nextLine();
-            if(b.toLowerCase().equals("n"))
+            if (b.toLowerCase().equals("n"))
                 return;
         }
-        int id = members.size() + 1;
-        String regDate = Util.getNowDateStr();
+        // Prompt for member details
         String loginId;
         while (true) {
             System.out.print("로그인 아이디: ");
@@ -176,11 +169,35 @@ public class Main {
         System.out.print("이름: ");
         String name = scanner.nextLine();
 
-        Member member = new Member(id, loginId, loginPw, name);
-        members.add(member);
-        System.out.printf("%d번 회원이 생성되었습니다. 환영합니다!\n", id);
-        currentMemberIdx = id - 1;
-        isLogin = true;
+        try {
+            // Connect to the database
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
+
+            // Prepare SQL statement
+            String sql = "INSERT INTO member (loginId, loginPw, name) VALUES (?, ?, ?)";
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                // Set parameters
+                statement.setString(1, loginId);
+                statement.setString(2, loginPw);
+                statement.setString(3, name);
+
+                // Execute SQL statement
+                int rowsAffected = statement.executeUpdate();
+                if (rowsAffected == 1) {
+                    System.out.println("회원가입이 성공적으로 완료되었습니다.");
+                } else {
+                    System.out.println("회원가입에 실패하였습니다.");
+                }
+            } catch (SQLException e) {
+                System.err.println("SQL 예외 발생: " + e.getMessage());
+            } finally {
+                // Close database connection
+                connection.close();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     private static void listMembers() {
@@ -198,41 +215,133 @@ public class Main {
         System.out.print("예매할 영화 제목: ");
         String movieTitle = scanner.nextLine();
 
-        for (MovieInfo movie : movieList) {
-            if (movie.getTitle().equals(movieTitle)) {
-                System.out.println("예매 가능한 좌석:");
-                String[] remainingSeats = movie.getRemainingSeats();
-                for (int i = 0; i < remainingSeats.length; i++) {
-                    System.out.print(remainingSeats[i] + " ");
-                }
-                System.out.println();
+        try {
+            // Connect to the database
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
 
-                System.out.print("좌석 선택: ");
-                int selectedSeat = Integer.parseInt(scanner.nextLine());
+            // Check if the movie exists
+            String findMovieSQL = "SELECT id FROM movie_info WHERE title = ?";
+            try (PreparedStatement statement = connection.prepareStatement(findMovieSQL)) {
+                statement.setString(1, movieTitle);
+                ResultSet resultSet = statement.executeQuery();
 
-                if (selectedSeat < 1 || selectedSeat > 10){
-                    System.out.println("잘못된 좌석 선택입니다.");
+                if (!resultSet.next()) {
+                    System.out.println("해당 영화를 찾을 수 없습니다.");
                     return;
                 }
-                remainingSeats[selectedSeat - 1] = "X";
-                members.get(currentMemberIdx).getMyMovie().put(movieTitle, selectedSeat);
-                System.out.println("예매가 완료되었습니다.");
-                return;
+
+                int movieId = resultSet.getInt("id");
+
+                // Check remaining seats
+                String getRemainingSeatsSQL = "SELECT * FROM movie_info WHERE id = ?";
+                try (PreparedStatement seatStatement = connection.prepareStatement(getRemainingSeatsSQL)) {
+                    seatStatement.setInt(1, movieId);
+                    ResultSet seatResult = seatStatement.executeQuery();
+
+                    if (!seatResult.next()) {
+                        System.out.println("예매 정보를 가져오는 데 실패하였습니다.");
+                        return;
+                    }
+
+                    String[] remainingSeats = new String[10];
+                    for (int i = 0; i < 10; i++) {
+                        remainingSeats[i] = seatResult.getString("seat_" + (i + 1));
+                    }
+
+                    System.out.println("예매 가능한 좌석:");
+                    for (int i = 0; i < remainingSeats.length; i++) {
+                        if (remainingSeats[i].equals("X")) {
+                            System.out.print("X ");
+                        } else {
+                            System.out.print((i + 1) + " ");
+                        }
+                    }
+                    System.out.println();
+
+                    System.out.print("좌석 선택: ");
+                    int selectedSeat = Integer.parseInt(scanner.nextLine());
+
+                    if (selectedSeat < 1 || selectedSeat > 10 || remainingSeats[selectedSeat - 1].equals("X")) {
+                        System.out.println("잘못된 좌석 선택입니다.");
+                        return;
+                    }
+
+                    // Update remaining seats in database
+                    String updateSeatsSQL = "UPDATE movie_info SET seat_" + selectedSeat + " = 'X' WHERE id = ?";
+                    try (PreparedStatement updateStatement = connection.prepareStatement(updateSeatsSQL)) {
+                        updateStatement.setInt(1, movieId);
+                        updateStatement.executeUpdate();
+                    }
+
+                    // Insert reservation into the database
+                    String insertReservationSQL = "INSERT INTO member_reservation (member_id, movie_id, seat_number) VALUES (?, ?, ?)";
+                    try (PreparedStatement insertStatement = connection.prepareStatement(insertReservationSQL)) {
+                        insertStatement.setInt(1, members.get(currentMemberIdx).getId());
+                        insertStatement.setInt(2, movieId);
+                        insertStatement.setInt(3, selectedSeat);
+
+                        int rowsAffected = insertStatement.executeUpdate();
+                        if (rowsAffected == 1) {
+                            System.out.println("예매가 완료되었습니다.");
+                        } else {
+                            System.out.println("예매에 실패하였습니다.");
+                        }
+                    }
+                }
             }
+        } catch (SQLException e) {
+            System.err.println("SQL 예외 발생: " + e.getMessage());
         }
-        System.out.println("해당 영화를 찾을 수 없습니다.");
     }
 
+
     private static void showMovies() {
-        Collections.sort(movieList);
-        for (MovieInfo movie : movieList) {
-            System.out.printf("%s (%.2f) - ", movie.getTitle(), movie.getRating());
-            for (String seat : movie.getRemainingSeats()) {
-                System.out.print(seat + " ");
+        try {
+            // Connect to the database
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
+
+            // Fetch movie information from the database
+            String getMoviesSQL = "SELECT title, total_ratings, seat_1, seat_2, seat_3, seat_4, seat_5, seat_6, seat_7, seat_8, seat_9, seat_10 FROM movie_info";
+            try (PreparedStatement statement = connection.prepareStatement(getMoviesSQL)) {
+                ResultSet resultSet = statement.executeQuery();
+
+                while (resultSet.next()) {
+                    String title = resultSet.getString("title");
+                    double totalRatings = resultSet.getDouble("total_ratings");
+                    String[] remainingSeats = new String[10];
+                    for (int i = 0; i < 10; i++) {
+                        remainingSeats[i] = resultSet.getString("seat_" + (i + 1));
+                    }
+
+                    System.out.print(title + " (" + totalRatings + ") ");
+                    for (String seat : remainingSeats) {
+                        if (seat.equals("X")) {
+                            System.out.print("X ");
+                        } else {
+                            System.out.print((seat.equals("0") ? 0 : Integer.parseInt(seat)) + " ");
+                        }
+                    }
+                    System.out.println();
+                }
             }
-            System.out.println();
+        } catch (SQLException e) {
+            System.err.println("SQL 예외 발생: " + e.getMessage());
         }
     }
+
+
+    private static double calculateRating(int rating1, int rating2, int rating3, int rating4, int rating5, int totalRatings) {
+        // Calculate total ratings
+        int total = rating1 + rating2 + rating3 + rating4 + rating5;
+
+        // Calculate weighted average rating
+        double weightedRating = (1 * rating1 + 2 * rating2 + 3 * rating3 + 4 * rating4 + 5 * rating5) / (double) total;
+
+        return weightedRating;
+    }
+
 
     private static void login() {
         System.out.print("로그인 아이디: ");
@@ -333,11 +442,6 @@ public class Main {
         currentMemberIdx = members.size() - 1;
         isLogin = true;
     }
-
-
-
-
-
 }
 
 
