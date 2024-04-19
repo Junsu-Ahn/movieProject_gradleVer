@@ -2,6 +2,7 @@ package org.example;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.Scanner;
@@ -144,70 +145,78 @@ public class myPage extends Main {
 
 
     public static void cancelReservation() {
-        Member currentMember = members.get(currentMemberIdx);
-        if (currentMember.getMyMovie().isEmpty()) {
-            System.out.println("예매 중인 영화가 없습니다.");
+        if (!isLogin) {
+            System.out.println("로그인 후 이용해주세요.");
             return;
         }
 
-        System.out.println("예매 현황 : ");
-        for (String movieTitle : currentMember.getMyMovie().keySet()) {
-            System.out.println(movieTitle);
-        }
+        Member currentMember = members.get(currentMemberIdx);
+        try {
+            // Connect to the database
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
 
-        System.out.print("취소할 영화 제목: ");
-        String movieTitle = scanner.nextLine();
+            // Query to retrieve the current member's reservations
+            String getReservationsSQL = "SELECT myMovie FROM member WHERE id = ?";
+            try (PreparedStatement statement = connection.prepareStatement(getReservationsSQL)) {
+                statement.setInt(1, currentMember.getId());
+                ResultSet resultSet = statement.executeQuery();
 
-        for (MovieInfo movie : movieList) {
-            if (movie.getTitle().equals(movieTitle)) {
-                Map<String, Integer> myMovie = currentMember.getMyMovie();
-                if (!myMovie.containsKey(movieTitle)) {
-                    System.out.println("해당 영화를 예매하지 않았습니다.");
-                    return;
-                }
+                if (resultSet.next()) {
+                    // Get the value of myMovie column from the result set
+                    String myMovie = resultSet.getString("myMovie");
 
-                try {
-                    // Connect to the database
-                    dbConnection.connect();
-                    Connection connection = dbConnection.getConnection();
-
-                    // Delete reservation from the database
-                    String deleteReservationSQL = "DELETE FROM member_reservation WHERE member_id = ? AND movie_id = ?";
-                    try (PreparedStatement statement = connection.prepareStatement(deleteReservationSQL)) {
-                        statement.setInt(1, currentMember.getId());
-                        statement.setInt(2, movie.getId());
-                        int rowsAffected = statement.executeUpdate();
-
-                        if (rowsAffected == 1) {
-                            System.out.println("예매가 취소되었습니다.");
-                        } else {
-                            System.out.println("예매 취소에 실패하였습니다.");
-                        }
-                    } catch (SQLException e) {
-                        System.err.println("SQL 예외 발생: " + e.getMessage());
-                    } finally {
-                        // Close database connection
-                        connection.close();
+                    // Check if myMovie is empty or null
+                    if (myMovie == null || myMovie.isEmpty()) {
+                        System.out.println("예매 중인 영화가 없습니다.");
+                        return;
                     }
 
-                    // Update remaining seats in memory
-                    String[] remainingSeats = movie.getRemainingSeats();
-                    for (int i = 0; i < remainingSeats.length; i++) {
-                        if (remainingSeats[i].equals("X")) {
-                            remainingSeats[i] = Integer.toString(i + 1);
-                            break;
+                    // Split the myMovie string to get individual movie reservations
+                    String[] reservations = myMovie.split(";");
+                    System.out.println("예매 현황 : ");
+                    System.out.println(myMovie);
+                    boolean foundReservation = false;
+                    StringBuilder updatedMyMovie = new StringBuilder();
+
+                    System.out.print("취소 할 영화 제목 : ");
+                    String movieTitleToCancel = scanner.nextLine();
+                    for (String reservation : reservations) {
+                        // Extract movie title and seat number from each reservation
+                        String[] parts = reservation.split(":");
+                        String movieTitle = parts[0];
+
+                        if (!foundReservation && movieTitle.equals(movieTitleToCancel)) {
+                            foundReservation = true;
+                            continue; // Skip this reservation
                         }
+
+                        updatedMyMovie.append(reservation).append(";"); // Append other reservations
                     }
-                    return;
-                } catch (SQLException e) {
-                    e.printStackTrace();
+
+                    if (!foundReservation) {
+                        System.out.println("해당 영화를 예매하지 않았습니다.");
+                        return;
+                    }
+
+                    // Remove last ';' character from updatedMyMovie
+                    String finalMyMovie = updatedMyMovie.toString().replaceAll(";$", "");
+
+                    // Update the reservation in the database
+                    String updateReservationSQL = "UPDATE member SET myMovie = ? WHERE id = ?";
+                    try (PreparedStatement updateStatement = connection.prepareStatement(updateReservationSQL)) {
+                        updateStatement.setString(1, finalMyMovie);
+                        updateStatement.setInt(2, currentMember.getId());
+                        updateStatement.executeUpdate();
+                    }
+
+                    System.out.println("예매가 취소되었습니다.");
                 }
             }
+        } catch (SQLException e) {
+            System.err.println("SQL 예외 발생: " + e.getMessage());
         }
-
-        System.out.println("해당 영화를 찾을 수 없습니다.");
     }
-
 
     public static void cancelReview() {
         if (members.get(currentMemberIdx).getMyReview().size() == 0) {

@@ -2,7 +2,9 @@ CREATE TABLE `member` (
     id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
     loginId VARCHAR(100) NOT NULL UNIQUE,
     loginPw VARCHAR(100) NOT NULL,
-    NAME VARCHAR(100) NOT NULL
+    NAME VARCHAR(100) NOT NULL,
+    myMovie VARCHAR(255),
+    myReview VARCHAR(255)
 );
 
 CREATE TABLE movie_info (
@@ -36,12 +38,7 @@ CREATE TABLE movie_seats (
     FOREIGN KEY (movie_id) REFERENCES movie_info(id)
 );
 
-CREATE TABLE my_review (
-    id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
-    member_id INT UNSIGNED NOT NULL,
-    movie_title VARCHAR(255) NOT NULL,
-    rating INT NOT NULL
-) ENGINE=INNODB;
 
 
-
+DELETE FROM `member`;
+DELETE FROM movie_info;

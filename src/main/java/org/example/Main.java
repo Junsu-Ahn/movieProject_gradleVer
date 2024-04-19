@@ -14,6 +14,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.Map;
+import java.util.Scanner;
 @Getter
 @Setter
 public class Main {
@@ -95,7 +97,6 @@ public class Main {
         if ( dbConnection == null ) {
             dbConnection = new DBConnection();
         }
-
         return dbConnection;
     }
     private static void loadMovies() {
@@ -275,11 +276,14 @@ public class Main {
                     }
 
                     // Insert reservation into the database
-                    String insertReservationSQL = "INSERT INTO member_reservation (member_id, movie_id, seat_number) VALUES (?, ?, ?)";
+                    String insertReservationSQL = "UPDATE member SET myMovie = CONCAT(IFNULL(myMovie, ''), ?) WHERE id = ?";
                     try (PreparedStatement insertStatement = connection.prepareStatement(insertReservationSQL)) {
-                        insertStatement.setInt(1, members.get(currentMemberIdx).getId());
-                        insertStatement.setInt(2, movieId);
-                        insertStatement.setInt(3, selectedSeat);
+                        // Create a string representation of the movie reservation
+                        String movieReservation = movieTitle + ": Seat Number - " + selectedSeat + ";";
+
+                        // Update the myMovie column for the current member
+                        insertStatement.setString(1, movieReservation);
+                        insertStatement.setInt(2, members.get(currentMemberIdx).getId());
 
                         int rowsAffected = insertStatement.executeUpdate();
                         if (rowsAffected == 1) {
@@ -337,7 +341,7 @@ public class Main {
         int total = rating1 + rating2 + rating3 + rating4 + rating5;
 
         // Calculate weighted average rating
-        double weightedRating = (1 * rating1 + 2 * rating2 + 3 * rating3 + 4 * rating4 + 5 * rating5) / (double) total;
+        double weightedRating = (1 * rating1 + 2 * rating2 + 3 * rating3 + 4 * rating4 + 5 * rating5) / (double)total;
 
         return weightedRating;
     }
@@ -369,12 +373,39 @@ public class Main {
             System.out.println("로그인 후 이용해주세요.");
             return;
         }
-        Member member = members.get(currentMemberIdx);
-        System.out.println(member.getName() + "님의 예매 현황:");
-        Map<String, Integer> myMovie = member.getMyMovie();
-        for (String movieTitle : myMovie.keySet()) {
-            System.out.println(movieTitle + " - 좌석 " + myMovie.get(movieTitle));
+        Member currentMember = members.get(currentMemberIdx);
+        try {
+            // Connect to the database
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
+
+            // Query to retrieve the current member's reservations
+            String getReservationsSQL = "SELECT myMovie FROM member WHERE id = ?";
+            try (PreparedStatement statement = connection.prepareStatement(getReservationsSQL)) {
+                statement.setInt(1, currentMember.getId());
+                ResultSet resultSet = statement.executeQuery();
+
+                if (resultSet.next()) {
+                    // Get the value of myMovie column from the result set
+                    String myMovie = resultSet.getString("myMovie");
+
+                    // Check if myMovie is empty or null
+                    if (myMovie == null || myMovie.isEmpty()) {
+                        System.out.println("예매 중인 영화가 없습니다.");
+                        return;
+                    }
+
+                    // Split the myMovie string to get individual movie reservations
+                    String[] reservations = myMovie.split(";");
+                    System.out.println("예매 현황 : ");
+                    System.out.println(myMovie);
+                }
+            }
         }
+        catch (SQLException e) {
+            System.err.println("SQL 예외 발생: " + e.getMessage());
+        }
+
         while(true)
         {
             System.out.println("메뉴를 선택하세요 : ");
@@ -415,7 +446,8 @@ public class Main {
                     System.out.println("올바르지 않은 명령어 입니다");
             }
         }
-    }
+        }
+
 
     private static boolean isJoinableLoginId(String loginId) {
         for (Member member : members) {
