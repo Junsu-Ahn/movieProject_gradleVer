@@ -7,7 +7,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.example.db.DBConnection;
 import java.io.IOException;
 import java.sql.*;
 import java.util.*;
@@ -19,7 +18,6 @@ public class Main {
     public static DBConnection dbConnection;
     public static List<MovieInfo> movieList = new ArrayList<>();
     public static List<Member> members = new ArrayList<>();
-    public static List<Member> memberDB = new ArrayList();
     public static Scanner scanner = new Scanner(System.in);
     public static int currentMemberIdx = -1;
     public static boolean isLogin = false;
@@ -34,9 +32,8 @@ public class Main {
         dbConnection.connect();
         makeTestData();
         loadMovies();
-        for(int i = 0 ; i < memberDB.size(); i++)
-            System.out.println(memberDB.get(i));
-
+        for(int i = 0 ; i < members.size(); i++)
+            System.out.println(members.get(i));
         while (true) {
             System.out.print("명령어) ");
             String cmd = scanner.nextLine();
@@ -174,7 +171,7 @@ public class Main {
 
             // Prepare SQL statement to get the max ID
             String getMaxIdSQL = "SELECT MAX(id) AS maxId FROM member";
-            int newId = 1; // Default value for new member ID
+            int newId = 0; // Default value for new member ID
             try (Statement getMaxIdStatement = connection.createStatement();
                  ResultSet resultSet = getMaxIdStatement.executeQuery(getMaxIdSQL)) {
                 // Get the max ID
@@ -498,7 +495,6 @@ public class Main {
             Member member = new Member(i+1, loginId, loginPw, name);
             members.add(member);
             member.saveToDatabase(dbConnection);
-            memberDB.add(member);
         }
         currentMemberIdx = members.size() - 1;
         isLogin = true;

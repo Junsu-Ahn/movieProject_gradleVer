@@ -17,7 +17,6 @@ public class DBConnection {
     public static String DB_PASSWORD;
     public static int DB_PORT;
 
-
     public void connect() {
         String url = "jdbc:mysql://localhost:" + DB_PORT + "/" + DB_NAME
                 + "?serverTimezone=Asia/Seoul&useOldAliasMetadataBehavior=true";
