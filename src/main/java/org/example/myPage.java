@@ -114,32 +114,53 @@ public class myPage extends Main {
             Connection connection = dbConnection.getConnection();
 
             // Prepare SQL statement
-            String sql = "DELETE FROM member WHERE id = ?";
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            String deleteSQL = "DELETE FROM member WHERE id = ?";
+            try (PreparedStatement deleteStatement = connection.prepareStatement(deleteSQL)) {
                 // Set parameter
-                statement.setInt(1, currentMember.getId());
+                deleteStatement.setInt(1, currentMember.getId());
 
-                // Execute SQL statement
-                int rowsAffected = statement.executeUpdate();
+                // Execute SQL statement to delete the member
+                int rowsAffected = deleteStatement.executeUpdate();
                 if (rowsAffected == 1) {
                     System.out.println("탈퇴가 성공적으로 완료되었습니다.");
                 } else {
                     System.out.println("탈퇴에 실패하였습니다.");
+                    return;
                 }
             } catch (SQLException e) {
                 System.err.println("SQL 예외 발생: " + e.getMessage());
-            } finally {
-                // Close database connection
-                connection.close();
+                return;
             }
 
-            members.remove(currentMemberIdx);
-            System.out.println("탈퇴가 완료되었습니다.");
+            // Shift member IDs for members after the deleted member
+            for (int i = currentMemberIdx + 1; i < members.size(); i++) {
+                Member member = members.get(i);
+                int newId = member.getId() - 1;
+                member.id = newId;
 
+                // Update member ID in the database
+                String updateSQL = "UPDATE member SET id = ? WHERE id = ?";
+                try (PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
+                    // Set parameters
+                    updateStatement.setInt(1, newId);
+                    updateStatement.setInt(2, member.getId() + 1);
+
+                    // Execute SQL statement to update member ID
+                    updateStatement.executeUpdate();
+                } catch (SQLException e) {
+                    System.err.println("SQL 예외 발생: " + e.getMessage());
+                }
+            }
+
+            // Close database connection
+            connection.close();
+
+            // Remove the member from the list and reset login status
+            members.remove(currentMemberIdx);
             isLogin = false;
             currentMemberIdx = -1;
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("SQL 예외 발생: " + e.getMessage());
         }
     }
 
@@ -219,20 +240,41 @@ public class myPage extends Main {
     }
 
     public static void cancelReview() {
-        if (members.get(currentMemberIdx).getMyReview().size() == 0) {
-            System.out.println("작성한 리뷰가 없습니다.");
-            return;
-        }
+        Member currentMember = members.get(currentMemberIdx);
 
         try {
             // Connect to the database
             dbConnection.connect();
             Connection connection = dbConnection.getConnection();
 
-            System.out.println("나의 리뷰 현황 : ");
-            for (Map.Entry<String, Integer> entry : members.get(currentMemberIdx).getMyReview().entrySet()) {
-                System.out.println(entry.getKey() + "  " + entry.getValue());
+            // Query to retrieve the member's reviews
+            String getReviewsSQL = "SELECT movie_title FROM my_review WHERE member_id = ?";
+            try (PreparedStatement statement = connection.prepareStatement(getReviewsSQL)) {
+                statement.setInt(1, currentMember.getId());
+                ResultSet resultSet = statement.executeQuery();
+
+                if (resultSet.next()) {
+                    // Get the value of movie_title column from the result set
+                    String movieTitle = resultSet.getString("movie_title");
+
+                    // Check if movieTitle is empty or null
+                    if (movieTitle == null || movieTitle.isEmpty()) {
+                        System.out.println("작성한 리뷰가 없습니다.");
+                        return;
+                    }
+
+                    // Output the member's reviews
+                    System.out.println("나의 리뷰 현황 : ");
+                    do {
+                        System.out.println(movieTitle);
+                    } while (resultSet.next());
+                } else {
+                    System.out.println("작성한 리뷰가 없습니다.");
+                    return;
+                }
             }
+
+            // Prompt for the movie title to delete review
             System.out.print("삭제할 리뷰의 영화제목 입력 : ");
             String movieTitle = scanner.nextLine();
 
@@ -240,7 +282,7 @@ public class myPage extends Main {
             String deleteReviewSQL = "DELETE FROM my_review WHERE member_id = ? AND movie_title = ?";
             try (PreparedStatement statement = connection.prepareStatement(deleteReviewSQL)) {
                 // Set parameters
-                statement.setInt(1, members.get(currentMemberIdx).getId());
+                statement.setInt(1, currentMember.getId());
                 statement.setString(2, movieTitle);
 
                 // Execute SQL statement
@@ -250,21 +292,7 @@ public class myPage extends Main {
                     return;
                 }
 
-                // Update local data
-                for (MovieInfo movie : movieList) {
-                    if (movie.getTitle().equals(movieTitle)) {
-                        int rating = members.get(currentMemberIdx).getMyReview().get(movieTitle);
-                        movie.minusRating(rating);
-                        members.get(currentMemberIdx).getMyReview().remove(movieTitle);
-                        break;
-                    }
-                }
-
                 System.out.println("리뷰 삭제가 완료되었습니다.");
-                System.out.println("나의 리뷰 현황 : ");
-                for (Map.Entry<String, Integer> entry : members.get(currentMemberIdx).getMyReview().entrySet()) {
-                    System.out.println(entry.getKey() + "  " + entry.getValue());
-                }
             } catch (SQLException e) {
                 System.err.println("SQL 예외 발생: " + e.getMessage());
             } finally {
@@ -272,15 +300,47 @@ public class myPage extends Main {
                 connection.close();
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("SQL 예외 발생: " + e.getMessage());
         }
     }
 
 
     public static void writeReview() {
-        System.out.println("예매 현황 : ");
-        for (String x : members.get(currentMemberIdx).getMyMovie().keySet())
-            System.out.println(x);
+        Member currentMember = members.get(currentMemberIdx);
+        try {
+            // Connect to the database
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
+
+            // Query to retrieve the member's reservations
+            String getReservationsSQL = "SELECT myMovie FROM member WHERE id = ?";
+            try (PreparedStatement statement = connection.prepareStatement(getReservationsSQL)) {
+                statement.setInt(1, currentMember.getId());
+                ResultSet resultSet = statement.executeQuery();
+
+                if (resultSet.next()) {
+                    // Get the value of myMovie column from the result set
+                    String myMovie = resultSet.getString("myMovie");
+
+                    // Check if myMovie is empty or null
+                    if (myMovie == null || myMovie.isEmpty()) {
+                        System.out.println("예매 중인 영화가 없습니다.");
+                        return;
+                    }
+
+                    // Split the myMovie string to get individual movie titles
+                    String[] movies = myMovie.split(";");
+
+                    System.out.println("예매 현황 : ");
+                    for (String movie : movies) {
+                        String[] parts = movie.split(":");
+                        System.out.println(parts[0]);
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("SQL 예외 발생: " + e.getMessage());
+        }
 
         System.out.print("리뷰를 작성할 영화 제목: ");
         String movieTitle = scanner.nextLine();

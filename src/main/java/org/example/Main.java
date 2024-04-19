@@ -9,10 +9,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.example.db.DBConnection;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.*;
 import java.util.Map;
 import java.util.Scanner;
@@ -175,13 +172,28 @@ public class Main {
             dbConnection.connect();
             Connection connection = dbConnection.getConnection();
 
-            // Prepare SQL statement
-            String sql = "INSERT INTO member (loginId, loginPw, name) VALUES (?, ?, ?)";
+            // Prepare SQL statement to get the max ID
+            String getMaxIdSQL = "SELECT MAX(id) AS maxId FROM member";
+            int newId = 1; // Default value for new member ID
+            try (Statement getMaxIdStatement = connection.createStatement();
+                 ResultSet resultSet = getMaxIdStatement.executeQuery(getMaxIdSQL)) {
+                // Get the max ID
+                if (resultSet.next()) {
+                    int maxId = resultSet.getInt("maxId");
+                    newId = maxId + 1;
+                }
+            } catch (SQLException e) {
+                System.err.println("SQL 예외 발생: " + e.getMessage());
+            }
+
+            // Prepare SQL statement to insert new member
+            String sql = "INSERT INTO member (id, loginId, loginPw, name) VALUES (?, ?, ?, ?)";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 // Set parameters
-                statement.setString(1, loginId);
-                statement.setString(2, loginPw);
-                statement.setString(3, name);
+                statement.setInt(1, newId);
+                statement.setString(2, loginId);
+                statement.setString(3, loginPw);
+                statement.setString(4, name);
 
                 // Execute SQL statement
                 int rowsAffected = statement.executeUpdate();
@@ -201,9 +213,26 @@ public class Main {
         }
     }
 
+
     private static void listMembers() {
-        for (Member member : members) {
-            System.out.println(member.getId() + "번 회원 - " + member.getName());
+        try {
+            // Connect to the database
+            dbConnection.connect();
+            Connection connection = dbConnection.getConnection();
+
+            // Query to retrieve member information from the database
+            String getMembersSQL = "SELECT id, name FROM member";
+            try (PreparedStatement statement = connection.prepareStatement(getMembersSQL)) {
+                ResultSet resultSet = statement.executeQuery();
+
+                while (resultSet.next()) {
+                    int memberId = resultSet.getInt("id");
+                    String memberName = resultSet.getString("name");
+                    System.out.println(memberId + "번 회원 - " + memberName);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("SQL 예외 발생: " + e.getMessage());
         }
     }
 
@@ -392,13 +421,13 @@ public class Main {
                     // Check if myMovie is empty or null
                     if (myMovie == null || myMovie.isEmpty()) {
                         System.out.println("예매 중인 영화가 없습니다.");
-                        return;
                     }
-
-                    // Split the myMovie string to get individual movie reservations
-                    String[] reservations = myMovie.split(";");
-                    System.out.println("예매 현황 : ");
-                    System.out.println(myMovie);
+                    else {
+                        // Split the myMovie string to get individual movie reservations
+                        String[] reservations = myMovie.split(";");
+                        System.out.println("예매 현황 : ");
+                        System.out.println(myMovie);
+                    }
                 }
             }
         }
