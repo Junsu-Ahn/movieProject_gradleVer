@@ -179,6 +179,9 @@ public class Main {
                 int rowsAffected = statement.executeUpdate();
                 if (rowsAffected == 1) {
                     System.out.println("회원가입이 성공적으로 완료되었습니다.");
+                    Member member = new Member(newId, loginId, loginPw, name);
+                    members.add(member);
+                    currentMemberIdx = members.size()-1;
                 } else {
                     System.out.println("회원가입에 실패하였습니다.");
                 }
@@ -442,7 +445,7 @@ public class Main {
                 case "4":
                 case "회원정보수정":
                     myPage.fix();
-                    break;
+                    return;
                 case "5":
                 case "이전으로":
                     return;

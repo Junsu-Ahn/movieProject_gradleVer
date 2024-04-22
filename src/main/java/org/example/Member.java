@@ -79,4 +79,6 @@ class Member{
     public void setName(String newName) {
         this.name = newName;
     }
+
+    public void setPw(String newPw) { this.loginPw = newPw;}
 }

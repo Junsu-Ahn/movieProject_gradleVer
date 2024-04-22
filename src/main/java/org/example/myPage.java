@@ -53,6 +53,7 @@ public class myPage extends Main {
                         int rowsAffected = statement.executeUpdate();
                         if (rowsAffected == 1) {
                             System.out.println("비밀번호 변경이 완료되었습니다. 다시 로그인하세요.");
+                            currentMember.setPw(newPassword);
                             logout();
                         } else {
                             System.out.println("비밀번호 변경에 실패하였습니다.");
@@ -254,6 +255,7 @@ public class myPage extends Main {
 
     public static void writeReview() {
         Member currentMember = members.get(currentMemberIdx);
+        String myMovie = null; // 변수를 선언하고 초기화합니다.
         try {
             // Connect to the database
             dbConnection.connect();
@@ -267,7 +269,7 @@ public class myPage extends Main {
 
                 if (resultSet.next()) {
                     // Get the value of myMovie column from the result set
-                    String myMovie = resultSet.getString("myMovie");
+                    myMovie = resultSet.getString("myMovie");
 
                     // Check if myMovie is empty or null
                     if (myMovie == null || myMovie.isEmpty()) {
@@ -319,32 +321,42 @@ public class myPage extends Main {
                         if (rowsAffected == 1) {
                             System.out.println("리뷰가 작성되었습니다.");
 
-
-                        } else {
-                            System.out.println("리뷰 작성에 실패하였습니다.");
-                        }
-                        String findMovieSQL = "SELECT id FROM movie_info WHERE title = ?";
-                        try (PreparedStatement findStatement = connection.prepareStatement(findMovieSQL)) {
-                            findStatement.setString(1, movieTitle);
-                            ResultSet resultSet = findStatement.executeQuery();
-
-                            if (!resultSet.next()) {
-                                System.out.println("해당 영화를 찾을 수 없습니다.");
-                                return;
-                            }
-
-                            int movieId = resultSet.getInt("id");
-                            int seat = members.get(currentMemberIdx).getMyMovie().get(movieTitle).intValue();
-                            members.get(currentMemberIdx).myMovie.remove(movieTitle);
-                            // Prepare SQL statement to update the seat
-                            String updateSeatsSQL = "UPDATE movie_info SET seat_" + seat + " = ? WHERE id = ?";
-                            try (PreparedStatement updateStatement = connection.prepareStatement(updateSeatsSQL)) {
-                                updateStatement.setInt(1, seat);
-                                updateStatement.setInt(2, movieId); // Set the movie ID as the second parameter
+                            // Update the reservation in the database
+                            String updateReservationSQL = "UPDATE member SET myMovie = ? WHERE id = ?";
+                            try (PreparedStatement updateStatement = connection.prepareStatement(updateReservationSQL)) {
+                                // Remove the reviewed movie from the myMovie string
+                                String updatedMyMovie = removeReviewedMovieFromMyMovie(myMovie, movieTitle);
+                                updateStatement.setString(1, updatedMyMovie);
+                                updateStatement.setInt(2, currentMember.getId());
                                 updateStatement.executeUpdate();
                             } catch (SQLException e) {
                                 System.err.println("SQL 예외 발생: " + e.getMessage());
                             }
+                            String findMovieSQL = "SELECT id FROM movie_info WHERE title = ?";
+                            try (PreparedStatement findStatement = connection.prepareStatement(findMovieSQL)) {
+                                findStatement.setString(1, movieTitle);
+                                ResultSet resultSet = findStatement.executeQuery();
+
+                                if (resultSet.next()) {
+                                    int movieId = resultSet.getInt("id");
+                                    int seat = members.get(currentMemberIdx).getMyMovie().get(movieTitle).intValue();
+                                    members.get(currentMemberIdx).myMovie.remove(movieTitle);
+                                    // Prepare SQL statement to update the seat
+                                    String updateSeatsSQL = "UPDATE movie_info SET seat_" + seat + " = ? WHERE id = ?";
+                                    try (PreparedStatement updateStatement = connection.prepareStatement(updateSeatsSQL)) {
+                                        updateStatement.setInt(1, seat);
+                                        updateStatement.setInt(2, movieId); // Set the movie ID as the second parameter
+                                        updateStatement.executeUpdate();
+                                    } catch (SQLException e) {
+                                        System.err.println("SQL 예외 발생: " + e.getMessage());
+                                    }
+                                } else {
+                                    return;
+                                }
+                            }
+
+                        } else {
+                            System.out.println("리뷰 작성에 실패하였습니다.");
                         }
                     } catch (SQLException e) {
                         System.err.println("SQL 예외 발생: " + e.getMessage());
@@ -361,6 +373,21 @@ public class myPage extends Main {
         }
         System.out.println("해당 영화를 찾을 수 없습니다.");
     }
+
+    private static String removeReviewedMovieFromMyMovie(String myMovie, String movieTitle) {
+        StringBuilder updatedMyMovie = new StringBuilder();
+        String[] reservations = myMovie.split(";");
+        for (String reservation : reservations) {
+            String[] parts = reservation.split(":");
+            String title = parts[0];
+            if (!title.equals(movieTitle)) {
+                updatedMyMovie.append(reservation).append(";");
+            }
+        }
+        // Remove last ';' character from updatedMyMovie
+        return updatedMyMovie.toString().replaceAll(";$", "");
+    }
+
 
 }
 
