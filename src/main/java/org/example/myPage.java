@@ -199,24 +199,27 @@ public class myPage extends Main {
                     System.out.println(myMovie);
                     boolean foundReservation = false;
                     StringBuilder updatedMyMovie = new StringBuilder();
-
+                    int seat = 0;
+                    String movieTitle;
                     System.out.print("취소 할 영화 제목 : ");
                     String movieTitleToCancel = scanner.nextLine();
+                    System.out.print("취소 할 좌석 번호 : ");
+                    int seatNumberToCancel = Integer.parseInt(scanner.nextLine());
+
                     for (String reservation : reservations) {
                         // Extract movie title and seat number from each reservation
                         String[] parts = reservation.split(":");
-                        String movieTitle = parts[0];
-
-                        if (!foundReservation && movieTitle.equals(movieTitleToCancel)) {
+                        movieTitle = parts[0];
+                        seat = Integer.parseInt(parts[1].trim());
+                        if (movieTitle.equals(movieTitleToCancel) && seat == seatNumberToCancel) {
                             foundReservation = true;
                             continue; // Skip this reservation
                         }
-
                         updatedMyMovie.append(reservation).append(";"); // Append other reservations
                     }
 
                     if (!foundReservation) {
-                        System.out.println("해당 영화를 예매하지 않았습니다.");
+                        System.out.println("해당 영화를 예매하지 않았거나 입력한 좌석 번호로 예매한 내역이 없습니다.");
                         return;
                     }
 
@@ -231,6 +234,14 @@ public class myPage extends Main {
                         updateStatement.executeUpdate();
                     }
 
+                    // Update the seat status in movie_info table
+                    String updateSeatsSQL = "UPDATE movie_info SET seat_" + seatNumberToCancel + " = ? WHERE title = ?";
+                    try (PreparedStatement updateSeatsStatement = connection.prepareStatement(updateSeatsSQL)) {
+                        updateSeatsStatement.setString(1, String.valueOf(seatNumberToCancel));
+                        updateSeatsStatement.setString(2, movieTitleToCancel);
+                        updateSeatsStatement.executeUpdate();
+                    }
+
                     System.out.println("예매가 취소되었습니다.");
                 }
             }
@@ -239,70 +250,6 @@ public class myPage extends Main {
         }
     }
 
-    public static void cancelReview() {
-        Member currentMember = members.get(currentMemberIdx);
-
-        try {
-            // Connect to the database
-            dbConnection.connect();
-            Connection connection = dbConnection.getConnection();
-
-            // Query to retrieve the member's reviews
-            String getReviewsSQL = "SELECT movie_title FROM my_review WHERE member_id = ?";
-            try (PreparedStatement statement = connection.prepareStatement(getReviewsSQL)) {
-                statement.setInt(1, currentMember.getId());
-                ResultSet resultSet = statement.executeQuery();
-
-                if (resultSet.next()) {
-                    // Get the value of movie_title column from the result set
-                    String movieTitle = resultSet.getString("movie_title");
-
-                    // Check if movieTitle is empty or null
-                    if (movieTitle == null || movieTitle.isEmpty()) {
-                        System.out.println("작성한 리뷰가 없습니다.");
-                        return;
-                    }
-
-                    // Output the member's reviews
-                    System.out.println("나의 리뷰 현황 : ");
-                    do {
-                        System.out.println(movieTitle);
-                    } while (resultSet.next());
-                } else {
-                    System.out.println("작성한 리뷰가 없습니다.");
-                    return;
-                }
-            }
-
-            // Prompt for the movie title to delete review
-            System.out.print("삭제할 리뷰의 영화제목 입력 : ");
-            String movieTitle = scanner.nextLine();
-
-            // Prepare SQL statement to delete review
-            String deleteReviewSQL = "DELETE FROM my_review WHERE member_id = ? AND movie_title = ?";
-            try (PreparedStatement statement = connection.prepareStatement(deleteReviewSQL)) {
-                // Set parameters
-                statement.setInt(1, currentMember.getId());
-                statement.setString(2, movieTitle);
-
-                // Execute SQL statement
-                int rowsAffected = statement.executeUpdate();
-                if (rowsAffected == 0) {
-                    System.out.println("해당 영화에 대한 리뷰를 찾을 수 없습니다.");
-                    return;
-                }
-
-                System.out.println("리뷰 삭제가 완료되었습니다.");
-            } catch (SQLException e) {
-                System.err.println("SQL 예외 발생: " + e.getMessage());
-            } finally {
-                // Close database connection
-                connection.close();
-            }
-        } catch (SQLException e) {
-            System.err.println("SQL 예외 발생: " + e.getMessage());
-        }
-    }
 
 
     public static void writeReview() {
@@ -359,9 +306,10 @@ public class myPage extends Main {
                     Connection connection = dbConnection.getConnection();
 
                     // Prepare SQL statement to update rating and total_ratings
-                    String updateRatingSQL = "UPDATE movie_info SET rating_"
-                            + rating + " = rating_" + rating + " + 1, total_ratings " +
-                            "= (rating_1 + 2 * rating_2 + 3 * rating_3 + 4 * rating_4 + 5 * rating_5) / 5 WHERE title = ?";
+                    String updateRatingSQL = "UPDATE movie_info SET rating_" + rating + " = rating_" + rating + " + 1, " +
+                            "total_ratings = (rating_1 + 2 * rating_2 + 3 * rating_3 + 4 * rating_4 + 5 * rating_5) / " +
+                            "(rating_1 + rating_2 + rating_3 + rating_4 + rating_5) WHERE title = ?";
+
                     try (PreparedStatement statement = connection.prepareStatement(updateRatingSQL)) {
                         // Set parameter
                         statement.setString(1, movieTitle);
@@ -371,13 +319,32 @@ public class myPage extends Main {
                         if (rowsAffected == 1) {
                             System.out.println("리뷰가 작성되었습니다.");
 
-                            // myReview에 추가
-                            members.get(currentMemberIdx).getMyReview().put(movieTitle, rating);
 
-                            // 예매 현황에서 삭제
-                            members.get(currentMemberIdx).myMovie.remove(movieTitle);
                         } else {
                             System.out.println("리뷰 작성에 실패하였습니다.");
+                        }
+                        String findMovieSQL = "SELECT id FROM movie_info WHERE title = ?";
+                        try (PreparedStatement findStatement = connection.prepareStatement(findMovieSQL)) {
+                            findStatement.setString(1, movieTitle);
+                            ResultSet resultSet = findStatement.executeQuery();
+
+                            if (!resultSet.next()) {
+                                System.out.println("해당 영화를 찾을 수 없습니다.");
+                                return;
+                            }
+
+                            int movieId = resultSet.getInt("id");
+                            int seat = members.get(currentMemberIdx).getMyMovie().get(movieTitle).intValue();
+                            members.get(currentMemberIdx).myMovie.remove(movieTitle);
+                            // Prepare SQL statement to update the seat
+                            String updateSeatsSQL = "UPDATE movie_info SET seat_" + seat + " = ? WHERE id = ?";
+                            try (PreparedStatement updateStatement = connection.prepareStatement(updateSeatsSQL)) {
+                                updateStatement.setInt(1, seat);
+                                updateStatement.setInt(2, movieId); // Set the movie ID as the second parameter
+                                updateStatement.executeUpdate();
+                            } catch (SQLException e) {
+                                System.err.println("SQL 예외 발생: " + e.getMessage());
+                            }
                         }
                     } catch (SQLException e) {
                         System.err.println("SQL 예외 발생: " + e.getMessage());
@@ -385,9 +352,11 @@ public class myPage extends Main {
                         // Close database connection
                         connection.close();
                     }
+
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }
+
             }
         }
         System.out.println("해당 영화를 찾을 수 없습니다.");

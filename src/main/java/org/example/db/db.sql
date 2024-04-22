@@ -28,8 +28,6 @@ CREATE TABLE movie_info (
     seat_10 VARCHAR(2) DEFAULT '10'
 );
 
-ALTER TABLE movie_info AUTO_INCREMENT = 1;
-ALTER TABLE `member` AUTO_INCREMENT = 1;
 
 CREATE TABLE movie_seats (
     id INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
@@ -38,7 +36,10 @@ CREATE TABLE movie_seats (
     FOREIGN KEY (movie_id) REFERENCES movie_info(id)
 );
 
-
+SELECT * FROM `member`;
+SELECT * FROM movie_info;
 
 DELETE FROM `member`;
 DELETE FROM movie_info;
+ALTER TABLE movie_info AUTO_INCREMENT = 1;
+ALTER TABLE `member` AUTO_INCREMENT = 1;

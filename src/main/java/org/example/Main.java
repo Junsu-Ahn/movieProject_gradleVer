@@ -68,25 +68,6 @@ public class Main {
         }
     }
 
-    public static List<Member> getMemberList() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("SELECT * FROM `member`"));
-
-        List<Member> member_db = new ArrayList();
-        List<Map<String, Object>> rows = dbConnection.selectRows(sb.toString());
-
-        for(Map<String,Object> row : rows) {
-            int id = (int) row.get("id");
-            String loginId = (String) row.get("loginId");
-            String loginPw = (String) row.get("loginPw");
-            String name = (String) row.get("name");
-
-            member_db.add(new Member(id, loginId, loginPw, name));
-        }
-
-        return member_db;
-    }
-
     public static DBConnection getDBConnection() {
         if ( dbConnection == null ) {
             dbConnection = new DBConnection();
@@ -125,7 +106,7 @@ public class Main {
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             // 파라미터 설정
-            statement.setInt(1, movie.getId()); // 직접 id를 지정해줍니다.
+            statement.setInt(1, movie.getId());
             statement.setString(2, movie.getTitle());
 
             // 쿼리 실행
@@ -137,7 +118,7 @@ public class Main {
             }
         } catch (SQLException e) {
             System.err.println("SQL 예외 발생: " + e.getMessage());
-            throw e; // 예외를 다시 던져서 호출한 곳에서 처리할 수 있도록 함
+            throw e;
         }
     }
 
@@ -169,12 +150,14 @@ public class Main {
             dbConnection.connect();
             Connection connection = dbConnection.getConnection();
 
-            // Prepare SQL statement to get the max ID
+            // 회원가입시 가장 큰 인덱스 +1 값을 id로 설정
+            // auto_increment 때문에 id 자동생성 X
             String getMaxIdSQL = "SELECT MAX(id) AS maxId FROM member";
-            int newId = 0; // Default value for new member ID
+            int newId = 0;
             try (Statement getMaxIdStatement = connection.createStatement();
                  ResultSet resultSet = getMaxIdStatement.executeQuery(getMaxIdSQL)) {
-                // Get the max ID
+               // System.out.println(resultSet);
+               // com.mysql.cj.jdbc.result.ResultSetImpl@338c99c8
                 if (resultSet.next()) {
                     int maxId = resultSet.getInt("maxId");
                     newId = maxId + 1;
@@ -305,15 +288,15 @@ public class Main {
                     String insertReservationSQL = "UPDATE member SET myMovie = CONCAT(IFNULL(myMovie, ''), ?) WHERE id = ?";
                     try (PreparedStatement insertStatement = connection.prepareStatement(insertReservationSQL)) {
                         // Create a string representation of the movie reservation
-                        String movieReservation = movieTitle + ": Seat Number - " + selectedSeat + ";";
+                        String movieReservation = movieTitle + ":" + selectedSeat + ";";
 
                         // Update the myMovie column for the current member
                         insertStatement.setString(1, movieReservation);
                         insertStatement.setInt(2, members.get(currentMemberIdx).getId());
-
                         int rowsAffected = insertStatement.executeUpdate();
                         if (rowsAffected == 1) {
                             System.out.println("예매가 완료되었습니다.");
+                            members.get(currentMemberIdx).getMyMovie().put(movieTitle, selectedSeat);
                         } else {
                             System.out.println("예매에 실패하였습니다.");
                         }
@@ -333,7 +316,7 @@ public class Main {
             Connection connection = dbConnection.getConnection();
 
             // Fetch movie information from the database
-            String getMoviesSQL = "SELECT title, total_ratings, seat_1, seat_2, seat_3, seat_4, seat_5, seat_6, seat_7, seat_8, seat_9, seat_10 FROM movie_info";
+            String getMoviesSQL = "SELECT title, total_ratings, seat_1, seat_2, seat_3, seat_4, seat_5, seat_6, seat_7, seat_8, seat_9, seat_10 FROM movie_info ORDER BY total_ratings DESC";
             try (PreparedStatement statement = connection.prepareStatement(getMoviesSQL)) {
                 ResultSet resultSet = statement.executeQuery();
 
@@ -438,9 +421,8 @@ public class Main {
             System.out.println("1. 예매취소");
             System.out.println("2. 리뷰쓰기");
             System.out.println("3. 회원탈퇴");
-            System.out.println("4. 리뷰삭제");
-            System.out.println("5. 회원정보수정");
-            System.out.println("6. 이전으로");
+            System.out.println("4. 회원정보수정");
+            System.out.println("5. 이전으로");
             String m_cmd = scanner.nextLine();
 
             switch(m_cmd)
@@ -458,14 +440,10 @@ public class Main {
                     myPage.bye();
                     return;
                 case "4":
-                case "리뷰삭제":
-                    myPage.cancelReview();
-                    break;
-                case "5":
                 case "회원정보수정":
                     myPage.fix();
                     break;
-                case "6":
+                case "5":
                 case "이전으로":
                     return;
                 default:
